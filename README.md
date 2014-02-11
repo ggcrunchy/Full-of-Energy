@@ -1,4 +1,4 @@
 Full-of-Energy
 ==============
 
-A quick game for Corona Blitz 2
+Still in the idea stage at the moment.
