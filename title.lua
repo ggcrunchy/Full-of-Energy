@@ -1,4 +1,4 @@
---- Crazy stuff.
+--- Title scene.
 
 --
 -- Permission is hereby granted, free of charge, to any person obtaining
@@ -24,37 +24,56 @@
 --
 
 -- Standard library imports --
-local random = math.random
+local floor = math.floor
 
 -- Modules --
 local energy = require("energy")
 
 -- Corona globals --
-local audio = audio
-local timer = timer
+local display = display
+local native = native
+local system = system
 
--- Mess with the audio.
-local MusicOpts = { channel = 1 }
+-- Corona modules --
+local storyboard = require("storyboard")
+local widget = require("widget")
 
-local function SetVolume (volume)
-	audio.setVolume(volume, MusicOpts)
+-- --
+local Scene = storyboard.newScene()
+
+--
+function Scene:createScene ()
+	if system.getInfo("environment") == "simulator" then
+		widget.setTheme("widget_theme_ios")
+	end
+
+	self.view:insert(widget.newButton{
+		x = display.contentCenterX, y = display.contentHeight - 50, label = "Begin!",
+
+		onRelease = function()
+			storyboard.gotoScene("game")
+		end
+	})
+
+	self.view:insert(display.newText{
+		text = [[Oh no! The THING has too much energy!
+
+				Drag the globes into the slots to calm it down, and hold it off for 30 seconds!
+
+				Pop the blobs to keep them away!]],
+		x = display.contentCenterX, y = display.contentCenterY,
+		width = floor(.75 * display.contentWidth), font = native.systemFont, fontSize = 32
+	})
 end
 
-SetVolume(.25)
+Scene:addEventListener("createScene")
 
--- Exciting song!
-local music = audio.loadStream("Blitz.mp3")
+--
+function Scene:enterScene ()
+	energy.SetEnergy(nil)
+end
 
-audio.play(music, { loops = -1, fadein = 1000, channel = 1 })
+Scene:addEventListener("enterScene")
 
-timer.performWithDelay(1700, function()
-	local ecur = energy.GetEnergy()
-
-	if ecur then
-		SetVolume(.6 + random() * .25 * ecur) -- Louder than I thought :P
-	else
-		SetVolume(.25)
-	end
-end, 0)
-
-require("storyboard").gotoScene("title")
+--
+return Scene
