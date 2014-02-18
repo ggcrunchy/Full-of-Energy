@@ -23,6 +23,10 @@
 -- [ MIT license: http://www.opensource.org/licenses/mit-license.php ]
 --
 
+-- Standard library imports --
+local max = math.max
+local min = math.min
+
 -- Exports --
 local M = {}
 
@@ -44,7 +48,7 @@ end
 --- Setter.
 -- @number delta Amount by which to change.
 function M.UpdateEnergy (delta)
-	Energy = Energy + delta
+	Energy = min(max(Energy + delta, 0), 1)
 end
 
 -- Export the module.

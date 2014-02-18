@@ -32,6 +32,7 @@ local pi = math.pi
 local pow = math.pow
 local random = math.random
 local sin = math.sin
+local sqrt = math.sqrt
 
 -- Modules --
 local energy = require("energy")
@@ -164,10 +165,48 @@ local function AddSlots (scene)
 end
 
 --
+local function GlobeTouch (event)
+	local globe, phase = event.target, event.phase
+
+	if phase == "began" then
+		display.getCurrentStage():setFocus(globe)
+
+		globe.m_claimed = true
+
+	elseif phase == "moved" then
+		globe.x, globe.y = event.x, event.y
+
+	elseif phase == "ended" or phase == "cancelled" then
+		display.getCurrentStage():setFocus(nil)
+
+		for i = 1, Scene.slots.numChildren do
+			local slot = Scene.slots[i]
+			local dx, dy = slot.x - globe.x, slot.y - globe.y
+
+			if not slot.m_occupied and dx * dx + dy * dy < 150 then
+				globe:removeEventListener("touch", GlobeTouch)
+
+				globe.x, globe.y = slot.x, slot.y
+				globe.alpha = .3
+
+				globe.m_slot_index = i
+				slot.m_occupied = true
+
+				energy.UpdateEnergy(-1 / (SlotRows * 2))
+
+				break
+			end
+		end
+
+		globe.m_claimed = false
+	end
+
+	return true
+end
+
+--
 local function AddGlobes (scene)
 	scene.globes = display.newGroup()
-
-	scene.home, scene.away = {}, {}
 
 	local n = SlotRows * 2
 
@@ -177,10 +216,65 @@ local function AddGlobes (scene)
 		local y = CY + 30 * sin(angle) + ChestDY
 		local globe = display.newCircle(scene.globes, x, y, 20)
 
-		globe:setFillColor(.6, .3, .2)
+		globe:addEventListener("touch", GlobeTouch)
 		globe:setStrokeColor(0, 1, 0)
 
 		globe.strokeWidth = 2
+
+		globe.m_x, globe.m_y = x, y
+	end
+
+	scene.update_globes = timer.performWithDelay(20, function(event)
+		local g = .3 + sin(event.count / 2.5) * .2
+
+		for i = 1, scene.globes.numChildren do
+			scene.globes[i]:setFillColor(.6, g, .2)
+		end
+	end, 0)
+end
+
+--
+local RespawnParams = {
+	transition = 2000,
+
+	onComplete = function(object)
+		object.m_respawning = false
+	end
+}
+
+--
+local function DropGlobe (globe, blob)
+	globe:addEventListener("touch", GlobeTouch)
+
+	globe.alpha = 1
+
+	blob.m_globe_index = nil
+	globe.m_claimed = false
+end
+
+--
+local function BlobTouch (event)
+	if event.phase == "began" then
+		local blob = event.target
+
+		blob:removeEventListener("touch", BlobTouch)
+
+		local gi = blob.m_globe_index
+		local globe = gi and Scene.globes[gi]
+
+		if globe then
+			DropGlobe(globe, blob)
+		end
+
+		blob.m_respawning = true
+
+
+		RespawnParams.x = blob.m_x
+		RespawnParams.y = blob.m_y
+
+		transition.to(blob, RespawnParams)
+
+		return true
 	end
 end
 
@@ -196,33 +290,107 @@ local function AddBlobs (scene)
 	}
 
 	for  i = 1, #pos, 2 do
-		local blob = display.newCircle(scene.blobs, pos[i] * display.contentWidth, pos[i + 1] * display.contentHeight, 20)
+		local x, y = pos[i] * display.contentWidth, pos[i + 1] * display.contentHeight
+		local blob = display.newCircle(scene.blobs, x, y, 20)
 
-		blob:setFillColor(.2, .1, 1)
 		blob:setStrokeColor(1, .1, .1)
 
 		blob.strokeWidth = 3
+
+		blob.m_x, blob.m_y = x, y
 	end
+
+	scene.update_blobs = timer.performWithDelay(20, function(event)
+		local ecur = energy.GetEnergy()
+
+		for i = 1, scene.blobs.numChildren do
+			local blob = scene.blobs[i]
+
+			if blob.m_respawning then
+				blob:setFillColor(0)
+			else
+				blob:setFillColor(.2 * ecur, .1, .5 + ecur * .5)
+			end
+
+			local gi = blob.m_globe_index
+			local globe, dx, dy, sqr = gi and scene.globes[gi]
+
+			--
+			if globe then
+				dx, dy = globe.m_x - blob.x, globe.m_y - blob.y
+				sqr = dx * dx + dy * dy
+
+				if sqr < 150 then
+					DropGlobe(globe, blob)
+				else
+					globe.x, globe.y = blob.x + 20, blob.y + 20
+				end
+
+			--
+			else
+				for i = 1, scene.globes.numChildren do
+					local globe = scene.globes[i]
+
+					if not globe.m_claimed then
+						dx, dy = globe.m_x - blob.x, globe.m_y - blob.y
+						sqr = dx * dx + dy * dy
+
+						if sqr < 150 then
+							blob.m_globe_index = i
+							globe.m_claimed = true
+
+							local si = globe.m_slot_index
+
+							if si then
+								globe.m_slot_index = nil
+								scene.slots[i].m_occupied = false
+
+								energy.UpdateEnergy(1 / (SlotRows * 2))
+							end
+
+							break
+						end
+					end
+				end
+
+				if not blob.m_globe_index then
+					for i = 1, scene.globes.numChildren do
+						local globe = scene.globes[i]
+
+						if not globe.m_claimed then
+							dx, dy = globe.m_x - blob.x, globe.m_y - blob.y
+							sqr = dx * dx + dy * dy
+
+							break
+						end
+					end
+				end
+			end
+
+			local speed = (2 - ecur) * 5 / sqrt(sqr)
+
+			blob.x, blob.y = blob.x + speed * dx, blob.y + speed * dy
+		end
+	end, 0)
 end
 
 -- --
-local Seconds = 60
+local Seconds
 
 --
 local function UpdateClock (scene, count)
 	scene.clock.text = ("%i"):format(Seconds - count)
 
 	if count == Seconds then
-		local win = #scene.home == 10
+		local win = true
 
-		for _, globe in ipairs(scene.away) do
-			win = win and globe.in_slot
+		for i = 1, scene.globes.numChildren do
+			win = win and scene.globes[i].m_slot_index
 		end
 
 		local message = display.newText("You " .. (win and "Win!" or "Lose"), CX, CY, native.systemFontBold, 40)
 
 		transition.to(message, { xScale = 3, yScale = 3, time = 800, transition = easing.inOutExpo,
-				
 			onComplete = function(object)
 				object:removeSelf()
 
@@ -233,8 +401,11 @@ local function UpdateClock (scene, count)
 end
 
 --
-function Scene:enterScene ()
+function Scene:enterScene (info)
 	self.body = display.newGroup()
+
+	--
+	Seconds = info.params
 
 	-- Initalize thing's energy.
 	energy.SetEnergy(1)
@@ -259,15 +430,15 @@ Scene:addEventListener("enterScene")
 
 --
 function Scene:exitScene ()
+	timer.cancel(self.update_blobs)
 	timer.cancel(self.update_body)
+	timer.cancel(self.update_globes)
 
 	self.blobs:removeSelf()
 	self.body:removeSelf()
 	self.globes:removeSelf()
 	self.slots:removeSelf()
 	self.clock:removeSelf()
-
-	self.home, self.away = nil
 end
 
 Scene:addEventListener("exitScene")

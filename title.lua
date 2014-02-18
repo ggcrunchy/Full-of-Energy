@@ -47,18 +47,20 @@ function Scene:createScene ()
 		widget.setTheme("widget_theme_ios")
 	end
 
+	local seconds = 60
+
 	self.view:insert(widget.newButton{
 		x = display.contentCenterX, y = display.contentHeight - 50, label = "Begin!",
 
 		onRelease = function()
-			storyboard.gotoScene("game")
+			storyboard.gotoScene("game", { params = seconds })
 		end
 	})
 
 	self.view:insert(display.newText{
 		text = [[Oh no! The THING has too much energy!
 
-				Drag the globes into the slots to calm it down, and hold it off for 30 seconds!
+				Drag the glowing globes into the slots to calm it down, and hold it off for ]] .. seconds .. [[ seconds!
 
 				Pop the blobs to keep them away!]],
 		x = display.contentCenterX, y = display.contentCenterY,
